@@ -1,0 +1,27 @@
+# Python 缓存文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 虚拟环境文件夹
+venv/
+.venv/
+env/
+.env
+
+# VS Code 编辑器配置
+.vscode/
+
+# 操作系统生成的文件
+.DS_Store
+Thumbs.db
+
+# 日志和输出文件
+*.log
+*.png
+*.jpg
+
+# ！！！！ 核心安全配置 ！！！！
+# 忽略包含API密钥的配置文件
+tradingagents/default_config.py
