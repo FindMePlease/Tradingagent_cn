@@ -1,73 +1,58 @@
-# tradingagents/agents/analysts/policy_analyst.py (Pydantic V2 升级版)
-
-from pydantic import BaseModel, Field  # [升级] 直接从 pydantic 导入
+# tradingagents/agents/analysts/policy_analyst.py (V4.1 升级版)
+from pydantic import BaseModel, Field
 from langchain.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
 from langchain.output_parsers import PydanticOutputParser
 import logging
 
 from tradingagents.llms import llm_client_factory
 from tradingagents.dataflows.interface import AShareDataInterface
-# [重要] policy_analyst 不再直接调用 policy_news_utils
-# 它现在通过统一的 interface 获取数据
+from langchain_core.runnables import RunnableLambda
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Agent 的输出数据结构 ---
 class PolicyAnalysis(BaseModel):
-    analysis: str = Field(description="一份关于政策对公司影响的结构化分析报告。")
+    analysis: str = Field(description="一份关于政策及其跨行业影响的深度分析报告。")
 
-# --- System Prompt: 定义政策分析师的角色、任务和输出格式 ---
+# --- [核心升级] 全新的、具备全局视野的Prompt ---
 POLICY_ANALYST_PROMPT = """
-你是一位顶级的中国宏观经济与产业政策分析师，对政策的解读既深刻又敏锐。你的任务是分析给定的宏观和产业政策新闻，并评估它们对特定A股上市公司 {ticker} ({stock_name}) 的潜在传导影响。
+你是一位顶级的中国产业政策分析专家，拥有全局视野，擅长分析政策在不同行业间的传导效应。
+你的任务是基于“AI研究助理”为你提供的最新政策信息，进行一次**深度解读和二次分析**。
 
 {format_instructions}
 
-**你的分析框架应遵循以下逻辑：**
-1.  **政策定性**: 识别最重要的政策新闻，判断其属于宏观层面还是产业层面。
-2.  **影响路径分析**: 分析政策如何通过影响市场流动性、企业成本或行业需求，来传导至 {stock_name}。
-3.  **影响评估与分类**: 对关键政策的影响进行总结，并给出明确的情绪分类标签：**[政策利好]**, **[政策利空]**, 或 **[影响中性]**。
-4.  **综合结论**: 综合所有政策分析，给出一个关于当前政策环境对该公司总体影响的简短结论。
-
-**输入信息如下：**
+**AI研究助理提供的最新政策与宏观新闻摘要如下：**
 ---
-**股票代码:** {ticker} ({stock_name})
-**相关政策新闻:**
 {policy_news}
 ---
+
+**你的深度解读报告，必须包含以下几个方面：**
+1.  **直接影响分析**: 这项政策对「{stock_name}」所在的**直接行业**有何影响？是利好还是利空？
+2.  **跨行业传导分析 (核心)**: 这项政策，还可能对哪些**上下游或利益相关的行业板块**（例如：原材料、设备制造、消费端、替代品等）产生**间接的正面或负面影响**？请列举1-2个。
+3.  **产业链逻辑总结**: 综合来看，这项政策在整个产业链上的传导逻辑是怎样的？
+4.  **对本公司的最终影响**: 结合直接和间接影响，这项政策对「{stock_name}」的长期发展是重大的机遇，还是潜在的挑战？
 """
 
-# --- Agent的核心实现 ---
 def get_policy_analyst(llm_provider: str = None):
-    """构建并返回政策分析师的执行链。"""
-    
-    def get_policy_data(ticker: str) -> str:
-        logging.info(f"[PolicyAnalyst] 正在为 {ticker} 获取政策数据...")
-        try:
-            # 现在通过统一的、干净的接口获取数据
-            data_interface = AShareDataInterface(ticker=ticker)
-            news_content = data_interface.fetch_policy_news()
-            return news_content
-        except Exception as e:
-            logging.error(f"[PolicyAnalyst] 获取 {ticker} 政策数据时出错: {e}")
-            return f"获取政策新闻失败: {e}"
+    """
+    构建并返回具备跨行业视野的政策分析师的执行链。
+    """
+    def get_summary_from_interface(ticker: str) -> dict:
+        """工具函数，获取政策新闻和公司名称"""
+        logging.info(f"[PolicyAnalyst] 正在委托 AI研究助理 for {ticker}...")
+        data_interface = AShareDataInterface(ticker=ticker)
+        return {
+            "policy_news": data_interface.fetch_policy_news(),
+            "stock_name": data_interface.stock_name
+        }
 
     parser = PydanticOutputParser(pydantic_object=PolicyAnalysis)
     llm = llm_client_factory()
-    prompt_template = ChatPromptTemplate.from_template(
-        POLICY_ANALYST_PROMPT,
-        partial_variables={"format_instructions": parser.get_format_instructions()}
-    )
-
-    chain = (
-        {
-            "ticker": RunnablePassthrough(),
-            "stock_name": lambda ticker: AShareDataInterface(ticker).stock_name,
-            "policy_news": lambda ticker: get_policy_data(ticker),
-        }
-        | prompt_template
-        | llm
-        | parser  # [修正] 使用更健壮的解析器
-    )
+    prompt = ChatPromptTemplate.from_template(POLICY_ANALYST_PROMPT, partial_variables={"format_instructions": parser.get_format_instructions()})
     
+    chain = (
+        RunnableLambda(get_summary_from_interface)
+        | prompt
+        | llm
+        | parser
+    )
     return chain
