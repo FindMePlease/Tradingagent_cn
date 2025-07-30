@@ -1,4 +1,3 @@
-# tradingagents/dataflows/interface.py (V4.2 双核分析版)
 import logging
 import re
 from . import akshare_utils
@@ -14,7 +13,6 @@ class AShareDataInterface:
         self._stock_name = akshare_utils.get_stock_name(self.ticker)
         logging.info(f"数据接口已初始化 for {self._stock_name} ({self.ticker})")
         
-        # [V4.1 核心] 在初始化时，调用AI研究助理，获取并缓存所有实时数据
         self.ai_data = ai_research_assistant.get_data_by_ai_assistant(self.ticker, self._stock_name)
         if self.ai_data and "失败" not in self.ai_data.financial_metrics_summary:
             logging.info("AI研究助理提供的实时数据已成功缓存。")
@@ -33,32 +31,23 @@ class AShareDataInterface:
         except Exception: return 0.0
 
     def fetch_comprehensive_technical_report(self) -> str:
-        """
-        [核心升级] 获取一份包含“常规指标”和“缠论所需K线”的综合技术情报包
-        """
         logging.info(f"接口调用: 正在为 {self.ticker} 生成综合技术分析报告...")
-        # 1. 获取包含常规指标的日线数据
         daily_klines = akshare_utils.get_price_history(self.ticker_bs, frequency='d', days=365)
-        # 2. 获取用于缠论分析的30分钟K线数据
         m30_klines = akshare_utils.get_price_history(self.ticker_bs, frequency='30', days=90)
-
         if daily_klines.empty or m30_klines.empty:
             return "获取技术分析所需的多级别K线数据失败。\n"
-
-        # 为日线数据计算常规技术指标
         try:
             import pandas_ta as ta
-            daily_klines.ta.macd(append=True)
-            daily_klines.ta.rsi(append=True)
-            daily_klines.ta.bbands(append=True)
+            daily_klines.ta.macd(append=True); daily_klines.ta.rsi(append=True); daily_klines.ta.bbands(append=True)
             daily_klines.rename(columns={'MACD_12_26_9': 'MACD', 'MACDh_12_26_9': 'MACD_hist', 'MACDs_12_26_9': 'MACD_signal'}, inplace=True)
-            daily_report_df = daily_klines[['date', 'open', 'high', 'low', 'close', 'volume', 'MACD', 'RSI_14', 'BBL_20_2.0', 'BBU_20_2.0']].tail(60)
-        except Exception:
+            # [核心修正] 动态获取布林带的列名，避免KeyError
+            bb_cols = [col for col in daily_klines.columns if 'BBL' in col or 'BBU' in col]
+            report_cols = ['date', 'open', 'high', 'low', 'close', 'volume', 'MACD', 'RSI_14'] + bb_cols
+            daily_report_df = daily_klines[report_cols].tail(60)
+        except Exception as e:
+            logging.error(f"计算技术指标时出错: {e}。将返回原始行情。")
             daily_report_df = daily_klines[['date', 'open', 'high', 'low', 'close', 'volume']].tail(60)
-
         m30_report_df = m30_klines[['date', 'open', 'high', 'low', 'close', 'volume']].tail(120)
-
-        # 3. 打包成一份对AI友好的文本报告
         report = f"--- 关于 {self.stock_name}({self.ticker}) 的综合技术分析情报 ---\n\n"
         report += "### 第一部分：包含常规技术指标的日线数据 (最近60条)\n"
         report += daily_report_df.to_markdown(index=False) + "\n\n"
@@ -67,7 +56,6 @@ class AShareDataInterface:
         report += "请基于以上两份数据，同时进行常规技术分析和缠论分析。"
         return report
 
-    # --- 其他fetch函数保持不变，但为了完整性全部提供 ---
     def fetch_financial_reports(self) -> str:
         return self.ai_data.financial_metrics_summary if self.ai_data else "AI获取财务数据失败"
     def fetch_latest_news(self) -> str:
