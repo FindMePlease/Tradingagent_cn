@@ -1,3 +1,4 @@
+# tradingagents/utils/agent_states.py (V6.2 路径修正版)
 from typing import TypedDict, Optional
 from pydantic import BaseModel
 from tradingagents.agents.analysts.fundamentals_analyst import FundamentalsAnalysis
@@ -14,7 +15,7 @@ from tradingagents.agents.researchers.bear_researcher import BearishReport
 from tradingagents.agents.trader.trader import TradePlan
 
 class AgentState(TypedDict):
-    """定义了整个投研流程中共享的状态 (V5.2 终极版)。"""
+    """定义了整个投研流程中共享的状态。"""
     ticker: str
     stock_name: str
     briefing_book: dict 
