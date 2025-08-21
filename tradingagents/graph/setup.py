@@ -1,4 +1,3 @@
-# tradingagents/graph/setup.py (V5.2 终极修正版)
 import logging
 from tradingagents.agents.utils.agent_states import AgentState
 from tradingagents.agents.analysts import (
@@ -22,7 +21,6 @@ def print_agent_output(agent_name: str, output):
 
 class GraphNodes:
     def __init__(self, llm_provider: str = LLM_PROVIDER):
-        # 初始化所有智能体
         self.fundamentals_analyst = fundamentals_analyst.get_fundamentals_analyst()
         self.market_analyst = market_analyst.get_market_analyst()
         self.news_analyst = news_analyst.get_news_analyst()
@@ -37,7 +35,6 @@ class GraphNodes:
         self.trader = trader.get_trader_agent()
     
     def gather_intelligence(self, state: AgentState):
-        """[核心] 全新的“中央情报处”节点，一次性获取所有数据"""
         logging.info("节点执行: [中央情报处] - 启动情报收集...")
         data_interface = AShareDataInterface(state['ticker'])
         briefing_book = {
@@ -54,7 +51,6 @@ class GraphNodes:
         return {"briefing_book": briefing_book, "latest_close_price": latest_close_price}
 
     def run_analyst_team(self, state: AgentState):
-        """[核心] 分析师现在直接使用“情报手册”，不再自己收集数据"""
         logging.info("节点执行: [分析师团队] - 7位专家基于情报手册并行启动...")
         briefing = state['briefing_book']
         analysis_results = {
@@ -73,7 +69,6 @@ class GraphNodes:
     def run_research_manager(self, state: AgentState):
         logging.info("节点执行: [研究主管] - 正在整合7份报告...")
         manager_input = { "ticker": state['ticker'], "stock_name": state['stock_name'] }
-        # 从state中提取所有分析师的报告
         for key, value in state.items():
             if "analysis" in key and hasattr(value, 'analysis'):
                 manager_input[key] = value.analysis
@@ -90,30 +85,21 @@ class GraphNodes:
         bull_report = self.bull_researcher.invoke(bull_input)
         bear_report = self.bear_researcher.invoke(bear_input)
         risk_analysis = self.risk_manager.invoke(risk_input)
-        print_agent_output("多头研究员 (最终陈词)", bull_report)
-        print_agent_output("空头研究员 (最终陈词)", bear_report)
+        print_agent_output("多头研究员", bull_report)
+        print_agent_output("空头研究员", bear_report)
         print_agent_output("风险管理经理", risk_analysis)
         return {"bullish_report": bull_report, "bearish_report": bear_report, "risk_analysis": risk_analysis}
 
     def run_trader(self, state: AgentState):
-        """[核心修正] 确保将 full_briefing_book 传递给最终决策者"""
         logging.info("节点执行: [首席投资官 - 最终决策]")
-        
-        # 准备完整的《投研简报》
-        full_briefing_book = ""
-        for key, value in state.items():
-            if "analysis" in key and value is not None and hasattr(value, 'analysis'):
-                 full_briefing_book += f"--- {key.replace('_', ' ').title()} ---\n{value.analysis}\n\n"
-
+        full_briefing_book = "\n".join([f"--- {k} ---\n{v.analysis}\n" for k, v in state.items() if "analysis" in k])
         trader_input = {
-            "ticker": state['ticker'], 
-            "stock_name": state['stock_name'], 
+            "ticker": state['ticker'], "stock_name": state['stock_name'], 
             "latest_close_price": state['latest_close_price'], 
-            "full_briefing_book": full_briefing_book, # [核心修正] 将简报加入输入
+            "full_briefing_book": full_briefing_book,
             "bull_report": state['bullish_report'].analysis, 
             "bear_report": state['bearish_report'].analysis,
             "risk_report": state['risk_analysis'].analysis
         }
         decision = self.trader.invoke(trader_input)
-        logging.info("--- 最终交易计划已生成 ---")
         return {"final_decision": decision}

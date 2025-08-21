@@ -40,7 +40,6 @@ class AShareDataInterface:
             import pandas_ta as ta
             daily_klines.ta.macd(append=True); daily_klines.ta.rsi(append=True); daily_klines.ta.bbands(append=True)
             daily_klines.rename(columns={'MACD_12_26_9': 'MACD', 'MACDh_12_26_9': 'MACD_hist', 'MACDs_12_26_9': 'MACD_signal'}, inplace=True)
-            # [核心修正] 动态获取布林带的列名，避免KeyError
             bb_cols = [col for col in daily_klines.columns if 'BBL' in col or 'BBU' in col]
             report_cols = ['date', 'open', 'high', 'low', 'close', 'volume', 'MACD', 'RSI_14'] + bb_cols
             daily_report_df = daily_klines[report_cols].tail(60)
