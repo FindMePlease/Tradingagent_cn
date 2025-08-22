@@ -740,7 +740,14 @@ def get_enhanced_data_by_ai_assistant(ticker: str, stock_name: str) -> Comprehen
 
         # 提取增强版新闻信息
         logging.info("正在分析新闻和股价关联性...")
-        enhanced_news = extract_enhanced_news_from_search(all_search_results, stock_name, llm)
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(extract_enhanced_news_from_search, all_search_results, stock_name, llm)
+                enhanced_news = future.result(timeout=60)  # 新闻分析超时1分钟
+                logging.info("新闻分析完成")
+        except FutureTimeoutError:
+            logging.error("新闻分析超时，使用默认新闻")
+            enhanced_news = []
         
         # 生成综合报告
         logging.info("正在生成综合研究报告...")
@@ -771,8 +778,15 @@ def get_enhanced_data_by_ai_assistant(ticker: str, stock_name: str) -> Comprehen
         请确保分析客观、全面，基于搜索结果提供有价值的信息。
         """
         
-        # 使用LLM生成报告的其他部分
-        report_parts = llm.invoke(analysis_prompt)
+        # 使用LLM生成报告的其他部分（带超时保护）
+        try:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(llm.invoke, analysis_prompt)
+                report_parts = future.result(timeout=60)  # LLM分析超时1分钟
+                logging.info("LLM分析完成")
+        except FutureTimeoutError:
+            logging.error("LLM分析超时，使用默认分析")
+            report_parts = "分析超时，建议查看公司官方公告获取最新信息"
         
         # 基于metrics_dict给出估值与盈利质量简评（规则化示例）
         def valuation_comment_from_metrics(m: dict) -> str:
